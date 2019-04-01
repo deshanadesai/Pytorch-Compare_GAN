@@ -13,6 +13,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+from data import dataloader
 
 from models import Generator, Discriminator
 from loss_lib import *
