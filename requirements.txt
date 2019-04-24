@@ -1,2 +1,4 @@
 POT
 matplotlib
+pymanopt
+autograd
