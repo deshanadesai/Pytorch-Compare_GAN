@@ -41,9 +41,9 @@ img_shape = (opt.channels, opt.img_size, opt.img_size)
 cuda = True if torch.cuda.is_available() else False
 
 if opt.loss == 'TV':
-		lambda_pt = 0.1
-		margin = max(1, opt.batch_size / 64.0)
-		loss_class = EBGan(lambda_pt,margin)
+        lambda_pt = 0.1
+        margin = max(1, opt.batch_size / 64.0)
+        loss_class = EBGan(lambda_pt,margin)
 
 # Initialize generator and discriminator
 generator = Generator()
@@ -62,7 +62,6 @@ Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
 for epoch in range(opt.n_epochs):
     for i, (imgs, _) in enumerate(dataloader):
-
         # Configure input
         real_imgs = Variable(imgs.type(Tensor))
 
@@ -80,7 +79,7 @@ for epoch in range(opt.n_epochs):
         recon_imgs, img_embeddings = discriminator(gen_imgs)
 
         # Loss measures generator's ability to fool the discriminator
-				g_loss = loss_class.gloss(recon_imgs, gen_imgs, img_embeddings)
+        g_loss = loss_class.gloss(recon_imgs, gen_imgs, img_embeddings)
 
         g_loss.backward()
         optimizer_G.step()
@@ -94,8 +93,7 @@ for epoch in range(opt.n_epochs):
         # Measure discriminator's ability to classify real from generated samples
         real_recon, _ = discriminator(real_imgs)
         fake_recon, _ = discriminator(gen_imgs.detach())
-				
-				d_loss = loss_class.dloss(real_recon, real_imgs, fake_recon, gen_imgs)
+        d_loss = loss_class.dloss(real_recon, real_imgs, fake_recon, gen_imgs)
 
         d_loss.backward()
         optimizer_D.step()
