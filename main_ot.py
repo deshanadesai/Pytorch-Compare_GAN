@@ -50,6 +50,8 @@ if __name__=="__main__":
     parser.add_argument('--n_extra_layers', type=int, default=0, help='Number of extra layers on gen and disc')
     parser.add_argument('--experiment', default=None, help='Where to store samples and models')
     parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is rmsprop)')
+
+    parser.add_argument('--ot-stable', action='store_true', help='whether to use stablized version of OT or not')
     opt = parser.parse_args()
     print(opt)
 
@@ -173,6 +175,9 @@ if __name__=="__main__":
     else:
         optimizerD = optim.RMSprop(netD.parameters(), lr = opt.lrD)
         optimizerG = optim.RMSprop(netG.parameters(), lr = opt.lrG)
+
+    if opt.ot_stable:
+        pass
 
     gen_iterations = 0
     for epoch in range(opt.niter):
