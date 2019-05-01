@@ -25,7 +25,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-
+from tqdm import tqdm
 
 
 
@@ -75,7 +75,7 @@ parser.add_argument('--imageSize', type=int, default=64, help='the height / widt
 parser.add_argument('--nz', type=int, default=10, help='size of the latent z vector')
 parser.add_argument('--ngf', type=int, default=64)
 parser.add_argument('--ndf', type=int, default=64)
-parser.add_argument('--niter', type=int, default=200, help='number of epochs to train for')
+parser.add_argument('--niter', type=int, default=20, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0001, help='learning rate, default=0.0001')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
@@ -139,21 +139,21 @@ bce_loss = torch.nn.BCELoss()
 bce_loss.to(device)
 
 # KL
-def g_loss(d_fake_score):
-    g_loss_kl = -torch.mean(torch.exp(d_fake_score-1))
-    return g_loss_kl
-
-def d_loss(d_real,d_fake):
-    return -(torch.mean(d_real) - torch.mean(torch.exp(d_fake-1)))
-
-
-# Reverse KL
 # def g_loss(d_fake_score):
-#     g_loss_kl = -torch.mean(-1-d_fake_score)
+#     g_loss_kl = -torch.mean(torch.exp(d_fake_score-1))
 #     return g_loss_kl
 
 # def d_loss(d_real,d_fake):
-#     return -(torch.mean(-torch.exp(d_real)) - torch.mean(-1-d_fake))
+#     return -(torch.mean(d_real) - torch.mean(torch.exp(d_fake-1)))
+
+
+# Reverse KL
+def g_loss(d_fake_score):
+    g_loss_kl = -torch.mean(-1-d_fake_score)
+    return g_loss_kl
+
+def d_loss(d_real,d_fake):
+    return -(torch.mean(-torch.exp(d_real)) - torch.mean(-1-d_fake))
 
 
 
@@ -185,7 +185,7 @@ class D(nn.Module):
         self.map1 = nn.Linear(input_size, hidden_size)
         self.map2 = nn.Linear(hidden_size, hidden_size)
         self.map3 = nn.Linear(hidden_size, output_size)
-        self.activation_fn = F.relu
+        self.activation_fn = F.sigmoid
 
     def forward(self, x):
         x = self.activation_fn(self.map1(x))
@@ -218,6 +218,21 @@ import matplotlib.tri as tri
 import matplotlib.mlab as mlab
 
 def plot(points, title):
+    plt.clf()
+    
+    for i, sample in enumerate(dataloader):
+        inp = np.array(sample['x'])
+        target = np.array(sample['class'])
+        x = np.reshape(inp, [inp.shape[0], inputdim])
+        plt.scatter(x[:,0],x[:,1],color='r',alpha=0.5,s=1)
+    # set axes range
+    plt.xlim(-3, 3)
+    plt.ylim(-3, 3)    
+    
+    
+    
+    
+    
     xcoord = points[:, 0]
     ycoord = points[:, 1]
     zcoord = xcoord * np.exp(-xcoord**2 - ycoord**2)
@@ -227,14 +242,14 @@ def plot(points, title):
 #     yi = np.linspace(-3.1, 3.1, ngridy)    
 #     zi = mlab.griddata(xcoord, ycoord, zcoord, xi, yi, interp='linear')
 
-    plt.scatter(points[:,0], points[:, 1], s=10, c='b', alpha=0.5)
+    plt.scatter(points[:,0], points[:, 1], s=10, c='b')
 #     triang = tri.Triangulation(xcoord, ycoord)
 #     plt.tricontour(xcoord, ycoord, zcoord, 15, linewidths=0.5, colors='k')
 #     plt.tricontourf(xcoord, ycoord, zcoord, 15,
 #                 norm=plt.Normalize(vmax=abs(zi).max(), vmin=-abs(zi).max()))
 #     plt.colorbar()
-    plt.scatter([meanmatrix[:, 0]], [meanmatrix[:, 1]], s=100, c='r', alpha=0.5)
-    plt.title(title)
+#     plt.scatter([meanmatrix[:, 0]], [meanmatrix[:, 1]], s=100, c='r', alpha=0.5)
+    plt.title(title.replace("_"," "))
     plt.ylim(-3, 3)
     plt.xlim(-3, 3)
     plt.savefig(opt.outf+'/'+title)
@@ -277,7 +292,7 @@ def g_sample():
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if cuda else torch.LongTensor
 
-for epoch in range(opt.niter):
+for epoch in tqdm(range(opt.niter)):
       for i, sample in enumerate(dataloader):
             points = Variable(sample['x'].type(Tensor))
             targets = Variable((sample['class']).type(LongTensor), requires_grad = False)        
@@ -316,11 +331,11 @@ for epoch in range(opt.niter):
 
 #             print("[%d/%d] [%d/%d] [G loss: %f] [D loss: %f (R) %f (F) %f]" % (epoch, opt.niter, i, len(dataloader), gloss.item(), dloss.item(), dloss_real.item(), dloss_fake.item()))
 
-            if i % 100==0:
+            if i % 10==0:
                 # display points
                 g_fake_data = g_sample()
                 samples.append(g_fake_data)
-                plot(g_fake_data, title='[{}] Iteration {}'.format('densityplot', epoch*len(dataloader)+i))              
+                plot(g_fake_data, title='Iteration_{}'.format(epoch*len(dataloader)+i))              
 
 
 
