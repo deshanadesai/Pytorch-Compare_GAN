@@ -16,9 +16,52 @@ import json
 
 import models.dcgan as dcgan
 import models.mlp as mlp
+from fid_score import *
+import matplotlib.pyplot as plt
+import pickle
+
+def plot():
+    with open(opt.experiment+'/d_real_loss.pkl', 'wb') as f:
+        pickle.dump(d_real_loss, f)
+    with open(opt.experiment+'/d_fake_loss.pkl', 'wb') as f:
+        pickle.dump(d_fake_loss, f)
+    with open(opt.experiment+'/d_loss.pkl', 'wb') as f:
+        pickle.dump(d_loss, f)
+    with open(opt.experiment+'/g_loss.pkl', 'wb') as f:
+        pickle.dump(g_loss, f)    
+    with open(opt.experiment+'/fid_score.pkl', 'wb') as f:
+        pickle.dump(score, f)      
+        
+    plt.clf()
+    plt.plot(g_iterations,d_real_loss)
+    plt.plot(g_iterations,d_fake_loss)
+    plt.legend(['D(x)','D(g(z))'])
+    plt.title('Discriminator Loss')
+    plt.savefig(opt.experiment+'/discriminator_loss')
+    
+    plt.clf()
+    plt.plot(g_iterations,d_loss)
+    plt.plot(g_iterations,g_loss)
+    plt.legend(['D loss','G loss'])
+    plt.title('GAN Loss')
+    plt.savefig(opt.experiment+'/gan_loss')
+    
+    plt.clf()
+    plt.plot(g_iterations,score)
+    plt.title('FID Score')   
+    plt.savefig(opt.experiment+'/fid_score')
+    
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 if __name__=="__main__":
+    
+    
+    score = []
+    d_real_loss = []
+    d_fake_loss = []
+    g_loss = []
+    d_loss = []
+    g_iterations = []    
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw ')
@@ -177,6 +220,7 @@ if __name__=="__main__":
         optimizerG = optim.RMSprop(netG.parameters(), lr = opt.lrG)
 
     gen_iterations = 0
+
     for epoch in range(opt.niter):
         data_iter = iter(dataloader)
         i = 0
@@ -200,7 +244,14 @@ if __name__=="__main__":
                 for p in netD.parameters():
                     p.data.clamp_(opt.clamp_lower, opt.clamp_upper)
 
-                data = data_iter.next()
+#                 data = data_iter.next()
+                try:
+                    data = next(data_iter)
+                except StopIteration:
+                    data_iter = iter(dataloader)
+                    data = next(data_iter)
+
+                    
                 i += 1
 
                 # train with real
@@ -245,13 +296,31 @@ if __name__=="__main__":
             print('[%d/%d][%d/%d][%d] Loss_D: %f Loss_G: %f Loss_D_real: %f Loss_D_fake %f'
                 % (epoch, opt.niter, i, len(dataloader), gen_iterations,
                 errD.data[0], errG.data[0], errD_real.data[0], errD_fake.data[0]))
-            if gen_iterations % 500 == 0:
+                        
+            if gen_iterations % 250 == 0:
+                
+                
+                os.makedirs('{0}/real/'.format(opt.experiment), exist_ok=True)
                 real_cpu = real_cpu.mul(0.5).add(0.5)
-                vutils.save_image(real_cpu, '{0}/real_samples.png'.format(opt.experiment))
+                for i in range(real_cpu.shape[0]):
+                    vutils.save_image(real_cpu[i], '{0}/real/real_samples_{1}.png'.format(opt.experiment, i))
+                
+                os.makedirs('{0}/fake_{1}/'.format(opt.experiment, gen_iterations), exist_ok=True)
                 fake = netG(Variable(fixed_noise, volatile=True))
                 fake.data = fake.data.mul(0.5).add(0.5)
+                for i in range(fake.shape[0]):
+                    vutils.save_image(fake.data[i], '{0}/fake_{1}/fake_samples_{2}.png'.format(opt.experiment, gen_iterations, i))
+                score.append(calculate_fid_given_paths(['wasserstein_lsun/real/', 'wasserstein_lsun/fake_{0}/'.format(gen_iterations)],opt.batchSize,'0',2048))
+                d_real_loss.append(errD_real.data[0])
+                d_fake_loss.append(errD_fake.data[0])
+                g_loss.append(errG.data[0])
+                d_loss.append(errD.data[0])
+                g_iterations.append(gen_iterations)
+                plot()
+                      
+                vutils.save_image(real_cpu, '{0}/real_samples.png'.format(opt.experiment))
                 vutils.save_image(fake.data, '{0}/fake_samples_{1}.png'.format(opt.experiment, gen_iterations))
 
-        # do checkpointing
-        torch.save(netG.state_dict(), '{0}/netG_epoch_{1}.pth'.format(opt.experiment, epoch))
-        torch.save(netD.state_dict(), '{0}/netD_epoch_{1}.pth'.format(opt.experiment, epoch))
+                # do checkpointing
+                torch.save(netG.state_dict(), '{0}/netG_epoch_{1}.pth'.format(opt.experiment, gen_iterations))
+                torch.save(netD.state_dict(), '{0}/netD_epoch_{1}.pth'.format(opt.experiment, gen_iterations))
