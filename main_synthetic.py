@@ -69,7 +69,7 @@ class SynthDataset(Dataset):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataroot', required=True, help='path to dataset')
-parser.add_argument('--div', required=True, choices=('KL', 'Reverse-KL', 'JS', 'Pearson'))
+parser.add_argument('--div', required=True, choices=('KL', 'Reverse-KL', 'JS', 'Pearson', 'Total-Variation'))
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
 parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
 parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
@@ -159,6 +159,18 @@ elif opt.div == 'JS':
 
     def conjugate(x):
         return -torch.log(2 - torch.exp(x))
+elif opt.div == 'Pearson':
+    def activation_func(x):
+        return x
+
+    def conjugate(x):
+        return 0.25 * torch.pow(x, 2) + x
+elif opt.div == 'Total-Variation':
+    def activation_func(x):
+        return 0.5 * torch.tanh(x)
+
+    def conjugate(x):
+        return x
 
 
 def g_loss(d_fake_score):
