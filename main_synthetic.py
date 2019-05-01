@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
-from torch.utils.data import Dataset 
+from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import torch.optim as optim
@@ -34,22 +34,22 @@ def gmm_sampler(num_samples, num_mixtures, mean, cov, mix_coeffs):
 
     samples = np.zeros(shape=[num_samples, len(mean[0])])
     target = np.zeros(shape=[num_samples])
-    
+
     i_start = 0
     data = []
     for i in range(len(mix_coeffs)):
         i_end = i_start + z[i]
         samples[i_start:i_end, :] = np.random.multivariate_normal(
             mean=np.array(mean)[i, :],
-            cov=np.diag(np.array(cov)[i, :]),            
+            cov=np.diag(np.array(cov)[i, :]),
             size=z[i])
-        
+
         target[i_start:i_end] = i
 
         for j in range(i_start,i_end):
             data.append({"x":samples[j],"class":target[j]})
         i_start = i_end
-   
+
     return data
 
 
@@ -59,16 +59,17 @@ class SynthDataset(Dataset):
     def __init__(self, train_set_len, train_set):
         self.train_set_len = train_set_len
         self.train_set = train_set
-    
+
     def __len__(self):
-        return self.train_set_len  
+        return self.train_set_len
 
     def __getitem__(self, idx):
         return self.train_set[idx]
-        
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataroot', required=True, help='path to dataset')
+parser.add_argument('--div', required=True, choices=('KL', 'Reverse-KL', 'JS', 'Pearson'))
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
 parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
 parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
@@ -95,7 +96,7 @@ try:
     os.makedirs(opt.outf+"/models", exist_ok=True)
 except OSError:
     pass
-    
+
 if opt.manualSeed is None:
     opt.manualSeed = random.randint(1, 10000)
 print("Random Seed: ", opt.manualSeed)
@@ -103,7 +104,7 @@ random.seed(opt.manualSeed)
 torch.manual_seed(opt.manualSeed)
 
 cudnn.benchmark = True
- 
+
 # Define parameters of the dataset
 
 ngpu = int(opt.ngpu)
@@ -129,7 +130,7 @@ train_set = gmm_sampler(train_set_len, num_mixtures, mean, cov, mix_coeffs)
 
 synthdataset = SynthDataset(train_set_len, train_set)
 dataloader = DataLoader(synthdataset, batch_size=batch_size,
-                        shuffle=True, num_workers=4) 
+                        shuffle=True, num_workers=4)
 
 # change to whatever loss is needed.
 adversarial_loss = torch.nn.CrossEntropyLoss()
@@ -138,31 +139,43 @@ adversarial_loss.to(device)
 bce_loss = torch.nn.BCELoss()
 bce_loss.to(device)
 
-# KL
-# def g_loss(d_fake_score):
-#     g_loss_kl = -torch.mean(torch.exp(d_fake_score-1))
-#     return g_loss_kl
+if opt.div == 'KL':
+    def activation_func(x):
+        return x
 
-# def d_loss(d_real,d_fake):
-#     return -(torch.mean(d_real) - torch.mean(torch.exp(d_fake-1)))
+    def conjugate(x):
+        return torch.exp(x - 1)
+
+elif opt.div == 'Reverse-KL':
+    def activation_func(x):
+        return -torch.exp(x)
+
+    def conjugate(x):
+        return -1 - torch.log(-x)
+
+elif opt.div == 'JS':
+    def activation_func(x):
+        return torch.log(2.0 / (1 + torch.exp(-x)))
+
+    def conjugate(x):
+        return -torch.log(2 - torch.exp(x))
 
 
-# Reverse KL
 def g_loss(d_fake_score):
-    g_loss_kl = -torch.mean(-1-d_fake_score)
+    g_loss_kl = -torch.mean(conjugate(activation_func(d_fake_score)))
     return g_loss_kl
 
 def d_loss(d_real,d_fake):
-    return -(torch.mean(-torch.exp(d_real)) - torch.mean(-1-d_fake))
+    return -(torch.mean(activation_func(d_real)) - torch.mean(conjugate(activation_func(d_fake))))
 
 
 
 
 class G(nn.Module):
     def __init__(self):
-        super(G, self).__init__()   
-        
-        
+        super(G, self).__init__()
+
+
         self.c1 = nn.Linear(opt.nz, 128)
         self.c1_bn = nn.BatchNorm1d(128)
         self.c1_relu = nn.ReLU(True)
@@ -170,15 +183,15 @@ class G(nn.Module):
         self.c2_bn = nn.BatchNorm1d(128)
         self.c2_relu = nn.ReLU(True)
         self.c3 = nn.Linear(128, 2)
-        self.c3_tanh = nn.Tanh()    
-        
+        self.c3_tanh = nn.Tanh()
+
     def forward(self, input_1):
         output = self.c1_relu(self.c1_bn(self.c1(input_1)))
         output = self.c2_relu(self.c2_bn(self.c2(output)))
         output = self.c3(output) # removed tanh because we dont want bounding
         return output
 
-        
+
 class D(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(D, self).__init__()
@@ -191,7 +204,7 @@ class D(nn.Module):
         x = self.activation_fn(self.map1(x))
         x = self.activation_fn(self.map2(x))
         return self.map3(x)
-      
+
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -200,10 +213,10 @@ def weights_init(m):
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
-        
+
 netD = D(2,256,1)
 netD.to(device)
-netD.apply(weights_init)  
+netD.apply(weights_init)
 optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 
 
@@ -219,7 +232,7 @@ import matplotlib.mlab as mlab
 
 def plot(points, title):
     plt.clf()
-    
+
     for i, sample in enumerate(dataloader):
         inp = np.array(sample['x'])
         target = np.array(sample['class'])
@@ -227,19 +240,19 @@ def plot(points, title):
         plt.scatter(x[:,0],x[:,1],color='r',alpha=0.5,s=1)
     # set axes range
     plt.xlim(-3, 3)
-    plt.ylim(-3, 3)    
-    
-    
-    
-    
-    
+    plt.ylim(-3, 3)
+
+
+
+
+
     xcoord = points[:, 0]
     ycoord = points[:, 1]
     zcoord = xcoord * np.exp(-xcoord**2 - ycoord**2)
 #     ngridx = 600
 #     ngridy = 600
 #     xi = np.linspace(-3.1, 3.1, ngridx)
-#     yi = np.linspace(-3.1, 3.1, ngridy)    
+#     yi = np.linspace(-3.1, 3.1, ngridy)
 #     zi = mlab.griddata(xcoord, ycoord, zcoord, xi, yi, interp='linear')
 
     plt.scatter(points[:,0], points[:, 1], s=10, c='b')
@@ -288,14 +301,14 @@ def g_sample():
         return g_fake_data.cpu().numpy()
 
 
-    
+
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if cuda else torch.LongTensor
 
 for epoch in tqdm(range(opt.niter)):
       for i, sample in enumerate(dataloader):
             points = Variable(sample['x'].type(Tensor))
-            targets = Variable((sample['class']).type(LongTensor), requires_grad = False)        
+            targets = Variable((sample['class']).type(LongTensor), requires_grad = False)
             batch_size = points.size(0)
 
             z = torch.randn(batch_size, nz, device=device)
@@ -303,7 +316,7 @@ for epoch in tqdm(range(opt.niter)):
             valid = Variable(Tensor(points.size(0), 1).fill_(1.0), requires_grad=False)
             fake = Variable(Tensor(points.size(0), 1).fill_(0.0), requires_grad=False)
 
-            real_points = Variable(points.type(Tensor), requires_grad = False) 
+            real_points = Variable(points.type(Tensor), requires_grad = False)
 
             # Update G
 
@@ -321,7 +334,7 @@ for epoch in tqdm(range(opt.niter)):
             optimizerD.zero_grad()
             output_d_fake = netD(gen_points.detach())
             output_d_real = netD(real_points)
-#             dloss_fake = bce_loss(output_d_fake, fake) 
+#             dloss_fake = bce_loss(output_d_fake, fake)
 #             dloss_real = bce_loss(output_d_real, valid)
 #             dloss = (dloss_fake+dloss_real)/2.
             dloss = d_loss(output_d_real, output_d_fake)
@@ -335,7 +348,7 @@ for epoch in tqdm(range(opt.niter)):
                 # display points
                 g_fake_data = g_sample()
                 samples.append(g_fake_data)
-                plot(g_fake_data, title='Iteration_{}'.format(epoch*len(dataloader)+i))              
+                plot(g_fake_data, title='Iteration_{}'.format(epoch*len(dataloader)+i))
 
 
 
