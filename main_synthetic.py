@@ -149,7 +149,7 @@ if opt.div == 'KL':
 
 elif opt.div == 'Reverse-KL':
     def activation_func(x):
-        return -torch.exp(-x)
+        return -torch.exp(x)
 
     def conjugate(x):
         return -1 - torch.log(-x)
@@ -211,7 +211,7 @@ class D(nn.Module):
         self.map1 = nn.Linear(input_size, hidden_size)
         self.map2 = nn.Linear(hidden_size, hidden_size)
         self.map3 = nn.Linear(hidden_size, output_size)
-        self.activation_fn = F.sigmoid
+        self.activation_fn = F.relu
 
     def forward(self, x):
         x = self.activation_fn(self.map1(x))
