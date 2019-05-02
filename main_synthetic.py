@@ -18,6 +18,7 @@ from torch.autograd import Variable
 from collections import defaultdict
 import pdb
 import torch.distributions as tdist
+import seaborn
 
 import matplotlib
 matplotlib.use('Agg')
@@ -148,7 +149,7 @@ if opt.div == 'KL':
 
 elif opt.div == 'Reverse-KL':
     def activation_func(x):
-        return -torch.exp(x)
+        return -torch.exp(-x)
 
     def conjugate(x):
         return -1 - torch.log(-x)
@@ -250,33 +251,12 @@ def plot(points, title):
         target = np.array(sample['class'])
         x = np.reshape(inp, [inp.shape[0], inputdim])
         plt.scatter(x[:,0],x[:,1],color='r',alpha=0.5,s=1)
-    # set axes range
-    plt.xlim(-3, 3)
-    plt.ylim(-3, 3)
 
-
-
-
-
-    xcoord = points[:, 0]
-    ycoord = points[:, 1]
-    zcoord = xcoord * np.exp(-xcoord**2 - ycoord**2)
-#     ngridx = 600
-#     ngridy = 600
-#     xi = np.linspace(-3.1, 3.1, ngridx)
-#     yi = np.linspace(-3.1, 3.1, ngridy)
-#     zi = mlab.griddata(xcoord, ycoord, zcoord, xi, yi, interp='linear')
-
-    plt.scatter(points[:,0], points[:, 1], s=10, c='b')
-#     triang = tri.Triangulation(xcoord, ycoord)
-#     plt.tricontour(xcoord, ycoord, zcoord, 15, linewidths=0.5, colors='k')
-#     plt.tricontourf(xcoord, ycoord, zcoord, 15,
-#                 norm=plt.Normalize(vmax=abs(zi).max(), vmin=-abs(zi).max()))
-#     plt.colorbar()
-#     plt.scatter([meanmatrix[:, 0]], [meanmatrix[:, 1]], s=100, c='r', alpha=0.5)
+    seaborn.kdeplot(points[:,0], points[:, 1], shaded=True, cmap='Blues', n_levels=20, clip=[[-3, 3]]*2)
     plt.title(title.replace("_"," "))
-    plt.ylim(-3, 3)
     plt.xlim(-3, 3)
+    plt.ylim(-3, 3)
+    plt.gcf().tight_layout()
     plt.savefig(opt.outf+'/'+title)
     plt.close()
 
