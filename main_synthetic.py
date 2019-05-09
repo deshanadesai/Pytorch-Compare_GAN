@@ -19,7 +19,6 @@ from collections import defaultdict
 import pdb
 import torch.distributions as tdist
 import seaborn
-
 import matplotlib
 matplotlib.use('Agg')
 
@@ -246,13 +245,11 @@ import matplotlib.mlab as mlab
 def plot(points, title):
     plt.clf()
 
-    for i, sample in enumerate(dataloader):
-        inp = np.array(sample['x'])
-        target = np.array(sample['class'])
-        x = np.reshape(inp, [inp.shape[0], inputdim])
-        plt.scatter(x[:,0],x[:,1],color='r',alpha=0.5,s=1)
+    x = np.array([sample['x'].data.numpy() for sample in dataloader])
+    x = np.concatenate(x, axis=0)
+    seaborn.scatterplot(x=x[:, 0], y=x[:, 1], size=1)
 
-    seaborn.kdeplot(points[:,0], points[:, 1], shaded=True, cmap='Blues', n_levels=20, clip=[[-3, 3]]*2)
+    seaborn.kdeplot(points[:,0], points[:, 1], cmap='viridis_r', n_levels=20)
     plt.title(title.replace("_"," "))
     plt.xlim(-3, 3)
     plt.ylim(-3, 3)
@@ -336,11 +333,8 @@ for epoch in tqdm(range(opt.niter)):
 
 #             print("[%d/%d] [%d/%d] [G loss: %f] [D loss: %f (R) %f (F) %f]" % (epoch, opt.niter, i, len(dataloader), gloss.item(), dloss.item(), dloss_real.item(), dloss_fake.item()))
 
-            if i % 10==0:
+            if (epoch*len(dataloader)+i) % 50==0:
                 # display points
                 g_fake_data = g_sample()
                 samples.append(g_fake_data)
                 plot(g_fake_data, title='Iteration_{}'.format(epoch*len(dataloader)+i))
-
-
-
